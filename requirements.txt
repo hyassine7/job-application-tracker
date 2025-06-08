@@ -1,0 +1,4 @@
+You must have the following packages installed:
+pandas
+pywin32
+xlsxwriter

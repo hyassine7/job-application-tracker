@@ -1,7 +1,9 @@
+# export_job_applications.py
+
 import os
 import sys
-# ensure this script’s folder is first on the import path
-sys.path.insert(0, os.path.dirname(__file__))
+# ensure this script’s folder is on the import path
+sys.path.append(os.path.dirname(__file__))
 
 import win32com.client
 import pandas as pd
@@ -12,86 +14,94 @@ from ui_helpers import ask_and_open
 
 
 def get_outlook_folder(account_name: str, folder_name: str):
+    """
+    Connect to Outlook and return the specified subfolder.
+    - account_name: e.g. "Gmail – youremail@example.com" or "[Gmail]"
+    - folder_name: e.g. "Inbox" or "Job Applications"
+    """
     outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
     for store in outlook.Folders:
         if store.Name.lower() == account_name.lower():
-            for subfolder in store.Folders:
-                if subfolder.Name.lower() == folder_name.lower():
-                    return subfolder
-    raise ValueError(f"Could not find '{folder_name}' under '{account_name}'.")
+            for sub in store.Folders:
+                if sub.Name.lower() == folder_name.lower():
+                    return sub
+    raise ValueError(f"Could not find folder '{folder_name}' under store '{account_name}'.")
 
 
 def extract_matching_phrases(folder):
-    messages = folder.Items
-    messages.Sort("[ReceivedTime]", True)
-
-    data = []
-    now = datetime.now()
-    cutoff = now - timedelta(days=90)
-    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
-
-    target_phrases = [
+    """
+    Pulls emails from the last N days whose Subject or Body
+    contains any exact substring in `TARGET_PHRASES` (case-insensitive).
+    """
+    MINDAYS = 90
+    TARGET_PHRASES = [
         "application submitted",
         "thank you for applying",
         "application sent",
         "thanks for applying",
-        "thanks for applying to google!",
-        "we have received your application",
-        "application received",
-        "application was received",
-        "your application has been sent"
+        # add or remove as desired...
     ]
 
-    for item in messages:
-        if item.Class == 43 and hasattr(item, "ReceivedTime") and item.ReceivedTime:
-            recv = item.ReceivedTime
-            if recv.tzinfo is not None:
-                recv = recv.replace(tzinfo=None)
-            if recv < cutoff:
-                break
+    items = folder.Items
+    items.Sort("[ReceivedTime]", True)
 
-            subj = (item.Subject or "").lower()
-            body = (item.Body or "").lower()
-            if not any(phrase in subj or phrase in body for phrase in target_phrases):
-                continue
+    cutoff = datetime.now() - timedelta(days=MINDAYS)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            sender_email = ""
-            if hasattr(item, "Sender") and item.Sender is not None:
-                sender_email = getattr(item.Sender, "Address", "")
+    records = []
+    for msg in items:
+        if msg.Class != 43 or not hasattr(msg, "ReceivedTime"):
+            continue
 
-            data.append({
-                "Date Received": recv.strftime("%Y-%m-%d %H:%M:%S"),
-                "Sender Name": item.SenderName or "",
-                "Sender Email": sender_email,
-                "Subject": item.Subject or "",
-                "Has Attachments": bool(item.Attachments.Count) if hasattr(item, "Attachments") else False,
-                "Status": "",
-                "Last Updated": now_str
-            })
+        rec_time = msg.ReceivedTime
+        if rec_time.tzinfo:
+            rec_time = rec_time.replace(tzinfo=None)
+        if rec_time < cutoff:
+            break
 
-    return data
+        subj = (msg.Subject or "").lower()
+        body = (msg.Body or "").lower()
+        if not any(phrase in subj or phrase in body for phrase in TARGET_PHRASES):
+            continue
+
+        sender = getattr(msg, "Sender", None)
+        email = getattr(sender, "Address", "") if sender else ""
+        records.append({
+            "Date Received": rec_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "Sender Name": msg.SenderName or "",
+            "Sender Email": email,
+            "Subject": msg.Subject or "",
+            "Has Attachments": bool(getattr(msg, "Attachments", [])) and msg.Attachments.Count > 0,
+            "Status": "",
+            "Last Updated": now_str
+        })
+
+    return records
 
 
 def main():
-    OUTLOOK_STORE_NAME = "hassanyassine.work@gmail.com"
-    FOLDER_NAME        = "Inbox"
-    OUTPUT_FILE        = r"C:\Scripts\job_applications_tracker.xlsx"
+    # ─── Customize these ────────────────────────────────────────
+    OUTLOOK_STORE = "YOUR_ACCOUNT_NAME"      # e.g. "[Gmail]" or "Gmail – youremail@example.com"
+    FOLDER_NAME   = "YOUR_FOLDER_NAME"       # e.g. "Inbox" or "Job Applications"
+    OUTPUT_FILE   = r"path\to\output_tracker.xlsx"
+    # ─────────────────────────────────────────────────────────────
 
     try:
-        inbox = get_outlook_folder(OUTLOOK_STORE_NAME, FOLDER_NAME)
+        folder = get_outlook_folder(OUTLOOK_STORE, FOLDER_NAME)
     except ValueError as e:
         print(f"ERROR: {e}")
         return
 
-    records = extract_matching_phrases(inbox)
+    records = extract_matching_phrases(folder)
     if not records:
-        print("ERROR: No matching application emails in the last 90 days.")
+        print("ERROR: no matching emails found in the last period.")
         return
 
     df = pd.DataFrame(records)
     cols = ["Date Received", "Sender Name", "Sender Email", "Subject", "Has Attachments", "Status", "Last Updated"]
-    df = df[[c for c in cols if c in df.columns]]
+    df = df[[c for c in cols if c in df]]
 
+    # if file exists, read, concatenate & dedupe
     if os.path.isfile(OUTPUT_FILE):
         old = pd.read_excel(OUTPUT_FILE, engine="openpyxl")
         combined = pd.concat([old, df], ignore_index=True)
@@ -99,12 +109,12 @@ def main():
         combined["Date Received"] = pd.to_datetime(combined["Date Received"])
         combined.sort_values("Date Received", ascending=False, inplace=True)
         combined["Date Received"] = combined["Date Received"].dt.strftime("%Y-%m-%d %H:%M:%S")
-        final_df = combined[cols]
+        final = combined[cols]
     else:
-        final_df = df.copy()
+        final = df.copy()
 
-    save_with_formatting(final_df, OUTPUT_FILE)
-    print(f"Tracker updated: now contains {len(final_df)} rows.")
+    save_with_formatting(final, OUTPUT_FILE)
+    print(f"✔ Tracker updated: {len(final)} rows total.")
     ask_and_open(OUTPUT_FILE)
 
 

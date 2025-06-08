@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# IDEs
+.vscode/
+.idea/
+
+# Excel output
+job_applications_tracker.xlsx
+
+# OS
+.DS_Store
+Thumbs.db

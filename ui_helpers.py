@@ -1,17 +1,20 @@
-import os
-import tkinter as tk
-from tkinter import messagebox
+# ui_helpers.py
 
-def ask_and_open(path: str) -> None:
+import os
+import ctypes
+import subprocess
+
+def ask_and_open(path: str):
     """
-    Pops up a Yes/No dialog asking whether to open `path`.
-    If the user clicks “Yes”, opens the file.
+    Pops up a simple Yes/No Windows dialog asking
+    “Open the tracker file now?” and if “Yes” opens it.
     """
-    root = tk.Tk()
-    root.withdraw()
-    if messagebox.askyesno(
-        title="Open Excel Tracker?",
-        message=f"Your tracker was updated.\n\nOpen it now?"
-    ):
-        os.startfile(path)
-    root.destroy()
+    res = ctypes.windll.user32.MessageBoxW(
+        0,
+        f"Tracker created at:\n{path}\n\nOpen it now?",
+        "Open Tracker?",
+        0x00000004 | 0x00000020  # MB_YESNO | MB_ICONQUESTION
+    )
+    # IDYES = 6
+    if res == 6:
+        subprocess.Popen(["start", path], shell=True)
