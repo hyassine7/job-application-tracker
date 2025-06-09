@@ -2,6 +2,7 @@
 
 import os
 import sys
+import argparse
 # ensure this script’s folder is on the import path
 sys.path.append(os.path.dirname(__file__))
 
@@ -28,7 +29,7 @@ def get_outlook_folder(account_name: str, folder_name: str):
     raise ValueError(f"Could not find folder '{folder_name}' under store '{account_name}'.")
 
 
-def extract_matching_phrases(folder):
+def extract_matching_phrases(folder, days_back=int):
     """
     Pulls emails from the last N days whose Subject or Body
     contains any exact substring in `TARGET_PHRASES` (case-insensitive).
@@ -77,14 +78,50 @@ def extract_matching_phrases(folder):
         })
 
     return records
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="Track job-application emails in Outlook and export to Excel."
+    )
+    p.add_argument(
+        "--store", "-s",
+        required=True,
+        help="Outlook store/account name (e.g. '[Gmail]' or 'youremail@gmail.com')"
+    )
+    p.add_argument(
+        "--folder", "-f",
+        default="Inbox",
+        help="Name of the folder under that store to scan (default: Inbox)"
+    )
+    p.add_argument(
+        "--output", "-o",
+        default="job_applications_tracker.xlsx",
+        help="Path to the Excel output file"
+    )
+    p.add_argument(
+        "--days", "-d",
+        type=int,
+        default=90,
+        help="How many days back to scan (default: 90)"
+    )
+    return p.parse_args()
 
 
 def main():
-    # ─── Customize these ────────────────────────────────────────
-    OUTLOOK_STORE = "YOUR_ACCOUNT_NAME"      # e.g. "[Gmail]" or "Gmail – youremail@example.com"
-    FOLDER_NAME   = "YOUR_FOLDER_NAME"       # e.g. "Inbox" or "Job Applications"
-    OUTPUT_FILE   = r"path\to\output_tracker.xlsx"
-    # ─────────────────────────────────────────────────────────────
+    args = parse_args()
+
+    OUTLOOK_STORE = args.store
+    FOLDER_NAME   = args.folder
+    OUTPUT_FILE   = args.output
+    DAYS_BACK     = args.days
+
+    try:
+        inbox = get_outlook_folder(OUTLOOK_STORE, FOLDER_NAME)
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        return
+
+    # pass DAYS_BACK into extract…
+    new_records = extract_matching_phrases(inbox, DAYS_BACK)
 
     try:
         folder = get_outlook_folder(OUTLOOK_STORE, FOLDER_NAME)
