@@ -1,0 +1,4 @@
+STORE_NAME=[Gmail]
+FOLDER_NAME=Inbox
+OUTPUT_PATH=job_applications_tracker.xlsx
+DAYS_BACK=90

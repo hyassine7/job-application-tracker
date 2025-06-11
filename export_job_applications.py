@@ -1,5 +1,6 @@
 # export_job_applications.py
-
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file if it exists
 import os
 import sys
 import argparse
@@ -40,6 +41,9 @@ def extract_matching_phrases(folder, days_back=int):
         "thank you for applying",
         "application sent",
         "thanks for applying",
+        "application received",
+        "job application",
+        "application confirmation",
         # add or remove as desired...
     ]
 
@@ -78,6 +82,7 @@ def extract_matching_phrases(folder, days_back=int):
         })
 
     return records
+
 def parse_args():
     p = argparse.ArgumentParser(
         description="Track job-application emails in Outlook and export to Excel."
