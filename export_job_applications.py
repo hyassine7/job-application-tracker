@@ -38,12 +38,12 @@ def extract_matching_phrases(folder, days_back=int):
     MINDAYS = 90
     TARGET_PHRASES = [
         "application submitted",
-        "thank you for applying",
+        "Thank you for applying",
         "application sent",
-        "thanks for applying",
+        "Thanks for applying",
         "application received",
         "job application",
-        "application confirmation",
+        "Application confirmation",
         # add or remove as desired...
     ]
 
